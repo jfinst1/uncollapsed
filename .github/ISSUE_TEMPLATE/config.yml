@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Theory & background
+    url: https://github.com/jfinst1/uncollapsed/blob/main/docs/theory.md
+    about: Read why a visible 0 is not one thing before filing conceptual questions.
