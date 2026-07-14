@@ -33,6 +33,7 @@ nav:
   - Home: index.md
   - Theory: theory.md
   - Usage: usage.md
+  - Benchmarks: benchmarks.md
   - API reference: api.md
 
 markdown_extensions:

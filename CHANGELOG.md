@@ -18,6 +18,14 @@ All notable changes to this project are documented here.
   Byzantine→escalate 0.88–0.94.
 - `uncollapsed --demo faults`, `tests/test_faultbench.py` (4 tests,
   auto-skip when the corpus is neither cached nor downloadable).
+- Full documentation overhaul (`mkdocs build --strict` verified): rewritten
+  Home/Theory/Usage covering the head's objective, the three background
+  modes and their failure cases, a tuning guide, and a documented **pole
+  attractor** failure mode (over-large `fit_var_weight` on data lacking one
+  of the clear poles collapses contested points to a fake lean — signature,
+  cause, and remedies included); new Benchmarks page with all protocols,
+  every result, reproduction commands, and a "what would falsify this"
+  section; Benchmarks added to site nav (its absence failed strict builds).
 
 ## [0.3.0] - 2026-07-13
 ### Added
