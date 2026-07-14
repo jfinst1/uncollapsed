@@ -50,4 +50,55 @@ def render_surface(net: UncollapsedNet, path: str,
     return True
 
 
-__all__ = ["render_surface"]
+def render_two_zeros(head, path: str, grid: int = 240, extent: float = 7.5,
+                     train_data: tuple[np.ndarray, np.ndarray] | None = None) -> bool:
+    """Render the four mass maps and the routing map for a trained FieldHead.
+
+    The punchline figure: the conflict cluster and the void ring both look like
+    "0.5-ish" to a probability readout, but they light up *different* mass maps
+    and route to *different* actions.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from matplotlib.colors import ListedColormap
+    except Exception as exc:  # pragma: no cover
+        print(f"(matplotlib unavailable, skipping PNG: {exc})")
+        return False
+
+    xs = np.linspace(-extent, extent, grid)
+    XX, YY = np.meshgrid(xs, xs)
+    pts = np.column_stack([XX.ravel(), YY.ravel()])
+    m = head.masses(pts)
+    routes = head.route(pts)
+    route_code = np.vectorize({"absence": 0, "hold": 1, "presence": 2,
+                               "escalate": 3, "gather": 4}.get)(routes).reshape(grid, grid)
+
+    fig, axes = plt.subplots(1, 5, figsize=(21, 4.2))
+    ext = (-extent, extent, -extent, extent)
+    for ax, key, cmap in zip(axes[:4],
+                             ["belief", "disbelief", "conflict", "voidness"],
+                             ["Reds", "Blues", "Oranges", "Greys"], strict=True):
+        im = ax.imshow(m[key].reshape(grid, grid), origin="lower", extent=ext,
+                       cmap=cmap, vmin=0, vmax=1, aspect="auto")
+        ax.set_title(key)
+        fig.colorbar(im, ax=ax, fraction=0.046)
+    rcmap = ListedColormap(["#2A4B7C", "#C9A227", "#8A2432", "#D2691E", "#BFBFBF"])
+    axes[4].imshow(route_code, origin="lower", extent=ext, cmap=rcmap,
+                   vmin=0, vmax=4, aspect="auto")
+    axes[4].set_title("route\n(blue=absence, gold=hold, red=presence,\n"
+                      "orange=ESCALATE, grey=GATHER)")
+    if train_data is not None:
+        X, y = train_data
+        for ax in axes:
+            ax.scatter(X[y == 1][:, 0], X[y == 1][:, 1], s=3, color="#8A2432", alpha=0.4)
+            ax.scatter(X[y == 0][:, 0], X[y == 0][:, 1], s=3, color="#2A4B7C", alpha=0.4)
+    fig.suptitle("Two kinds of zero, kept apart: contradiction (conflict) vs ignorance (voidness)",
+                 fontsize=13)
+    fig.tight_layout()
+    fig.savefig(path, dpi=120)
+    return True
+
+
+__all__ = ["render_surface", "render_two_zeros"]

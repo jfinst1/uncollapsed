@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uncollapsed"
-version = "0.1.0"
+version = "0.4.0"
 description = "Computation that keeps presence and absence separate and collapses only at the edge — with a first-class 'hold'."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,6 +13,7 @@ authors = [{ name = "Jon Finstad" }]
 keywords = [
     "ternary", "balanced-ternary", "three-valued-logic", "subjective-logic",
     "evidence-theory", "uncertainty", "abstention", "neural-network",
+    "selective-prediction", "ood-detection", "byzantine-fault-tolerance",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -25,7 +26,8 @@ dependencies = ["numpy>=1.23"]
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.6"]
-dev = ["pytest>=7.0", "ruff>=0.4", "matplotlib>=3.6", "pillow>=9.0"]
+bench = ["scikit-learn>=1.3"]
+dev = ["pytest>=7.0", "ruff>=0.4", "matplotlib>=3.6", "pillow>=9.0", "scikit-learn>=1.3"]
 docs = ["mkdocs-material>=9.5", "mkdocstrings[python]>=0.25"]
 
 [project.urls]

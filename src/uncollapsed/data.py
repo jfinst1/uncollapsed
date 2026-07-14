@@ -45,4 +45,41 @@ def make_data(n: int, noise: float, seed: int, abstain: bool = False) -> tuple[n
     return np.vstack([Xc, Xa]), np.concatenate([yc, ya])
 
 
-__all__ = ["make_xor", "make_data"]
+def make_two_zeros(n_clear: int = 400, n_conflict: int = 200, n_void: int = 200,
+                   seed: int = 0, train: bool = True):
+    """The "two zeros" benchmark: a world containing both kinds of 0.
+
+    * Two **clear** Gaussian clusters (presence at ``(+2, 0)``, absence at
+      ``(-2, 0)``) -- ordinary learnable structure.
+    * A **conflict** cluster at ``(0, +2.5)`` where labels are drawn 50/50 --
+      strong, genuinely contradictory evidence. The right move is to escalate.
+    * A **void** ring at radius ~6 -- far from every training point. There is
+      no evidence here at all. The right move is to gather data, not to guess.
+
+    ``train=True`` returns only clear + conflict points (the void region is,
+    by definition, unobserved). ``train=False`` returns all three groups plus a
+    ``zone`` array in ``{"clear", "conflict", "void"}`` for scoring.
+    """
+    rng = np.random.default_rng(seed)
+    half = n_clear // 2
+    Xp = rng.normal([+2.0, 0.0], 0.45, size=(half, 2))
+    Xa = rng.normal([-2.0, 0.0], 0.45, size=(n_clear - half, 2))
+    yp, ya = np.ones(half), np.zeros(n_clear - half)
+    Xc = rng.normal([0.0, +2.5], 0.45, size=(n_conflict, 2))
+    yc = rng.integers(0, 2, size=n_conflict).astype(float)
+    if train:
+        X = np.vstack([Xp, Xa, Xc])
+        y = np.concatenate([yp, ya, yc])
+        perm = rng.permutation(len(y))
+        return X[perm], y[perm]
+    theta = rng.uniform(0.0, 2.0 * np.pi, size=n_void)
+    r = rng.uniform(5.5, 6.5, size=n_void)
+    Xv = np.column_stack([r * np.cos(theta), r * np.sin(theta)])
+    yv = np.full(n_void, np.nan)                     # no true label exists here
+    X = np.vstack([Xp, Xa, Xc, Xv])
+    y = np.concatenate([yp, ya, yc, yv])
+    zone = np.array(["clear"] * n_clear + ["conflict"] * n_conflict + ["void"] * n_void)
+    return X, y, zone
+
+
+__all__ = ["make_xor", "make_data", "make_two_zeros"]

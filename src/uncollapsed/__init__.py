@@ -17,6 +17,14 @@ Two entry points:
   :class:`~uncollapsed.field.Mass`, and the collapse policy.
 * :mod:`uncollapsed.net` -- a trainable two-channel *network* that learns, keeps
   its hidden state uncollapsed, and can be taught to abstain.
+* :mod:`uncollapsed.head` -- a drop-in *field-gated readout head* for any
+  feature vector: four masses per sample and an explicit route
+  (``presence`` / ``absence`` / ``hold`` / ``escalate`` / ``gather``).
+
+Three benchmarks back the claims: :mod:`uncollapsed.bench` (synthetic),
+:mod:`uncollapsed.realbench` (digits / Fashion-MNIST with contradictory
+annotations), and :mod:`uncollapsed.faultbench` (crash vs Byzantine fault
+triage on real sensor-network telemetry).
 """
 from .field import (
     Collapse,
@@ -27,8 +35,9 @@ from .field import (
     UncollapsedField,
     channels_from_mass,
 )
+from .head import FieldHead
 
-__version__ = "0.1.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "UncollapsedField",
@@ -38,5 +47,6 @@ __all__ = [
     "CollapsePolicy",
     "CollapseReport",
     "channels_from_mass",
+    "FieldHead",
     "__version__",
 ]

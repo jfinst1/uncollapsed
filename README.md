@@ -109,6 +109,91 @@ The gold band below is the region the trained model collapses to **HOLD** — it
 
 ![Learned uncollapsed XOR surface: red = presence, blue = absence, gold = HOLD](assets/xor_surface.png)
 
+## The head — "I'm not ready to answer yet" as a drop-in layer
+
+`FieldHead` is a small trainable readout you can bolt onto **any** feature vector (raw features, or the penultimate activations of a model you already have). It produces the four masses per sample and an explicit **route**:
+
+| route      | meaning                                        | the right next action |
+| ---------- | ---------------------------------------------- | --------------------- |
+| `presence` / `absence` | a clear lean                       | act on it             |
+| `hold`     | weak lean, genuinely undecided                 | abstain               |
+| `escalate` | **conflict** — strong evidence for *both* poles | a human decides       |
+| `gather`   | **voidness** — evidence for *neither*           | collect data          |
+
+```python
+from uncollapsed import FieldHead
+
+head = FieldHead(in_dim=features.shape[1]).fit(features, labels)
+routes = head.route(new_features)      # "presence" | "absence" | "hold" | "escalate" | "gather"
+masses = head.masses(new_features)     # belief / disbelief / conflict / voidness per sample
+```
+
+The training objective encodes the library's philosophy directly: an evidential fit term *rewards* accumulating evidence where data is dense (so contradiction zones fill **both** channels instead of neither), while a background-void tax makes evidence cost something everywhere else — **void is the ground state; presence must be earned by data.** Gradients are hand-derived and verified (`grad_check_head()` ≈ 1e-7).
+
+## The two zeros benchmark
+
+Why carry two channels instead of one uncertainty scalar? Because "I can't say" is **two different situations** demanding **opposite actions** — and a single scalar cannot tell them apart:
+
+* **conflict** — strong contradictory evidence → *escalate to a human*
+* **voidness** — no evidence at all (off the data manifold) → *go gather data*
+
+`uncollapsed --demo triage` builds a world with two clear clusters, a 50/50-label **conflict** cluster, and an off-manifold **void** ring, then scores `FieldHead` against a capacity-matched vanilla MLP whose only signal is predictive entropy:
+
+| metric (seed 0) | FieldHead | entropy baseline |
+| --- | --- | --- |
+| clear-region accuracy | **1.000** | 1.000 |
+| conflict points flagged (≤5% false-flags on clear) | **1.000** | 1.000 |
+| void points flagged | **1.000** | 0.580 |
+| **triage AUC** — separating void from conflict | **0.993** | 0.019 |
+| routing: void → `gather` | **0.930** | — |
+| routing: conflict → `escalate` | **0.755** | — |
+
+Two results worth staring at. First, the baseline is **confidently wrong on 42% of off-manifold points** — its sigmoid saturates far from the data, so entropy reads *low* exactly where the model knows least. Second, the triage AUC of **0.019**: entropy doesn't merely fail to separate the two zeros, it points the *wrong way* (conflict points look "more uncertain" than void points, which look confident). The two-channel head separates them at **0.993** because voidness is literally an axis of its state, not a property it has to fake with one number.
+
+[![Five-panel figure: belief, disbelief, conflict, and voidness mass maps plus the routing map](assets/two_zeros_masses.png)](assets/two_zeros_masses.png)
+*Contradiction and ignorance light up different mass maps — and route to different actions. Orange = ESCALATE, grey = GATHER.*
+
+These tests ship in `tests/test_head.py`: the claims above are asserted, not just described.
+
+### It survives real data
+
+The same protocol runs on two real datasets (`uncollapsed --demo real`, add `--dataset fashion`): two real classes as the clear task, a third class in which **every sample appears with both labels** (two annotators, one disagreement — the static analogue of multi-annotator datasets like CIFAR-10H), and the remaining classes held out of training entirely as **near-OOD void** — the hard kind, sharing pixel statistics with the training data.
+
+| metric (seed 0) | digits (3 vs 8, conflict = 5) | fashion (trouser vs boot, conflict = shirt) |
+| --- | --- | --- |
+| clear accuracy | 0.977 | 0.998 |
+| **triage AUC** — head / entropy baseline | **0.908 / 0.231** | **0.704 / 0.281** |
+| conflict → `escalate` | 0.736 | 0.976 |
+| void → `gather` | 0.657 | 0.006 |
+
+Digits repeats the synthetic story on real data (seeds 1–2: triage 0.915/0.916 vs 0.215/0.188). Fashion maps the method's honest **boundary**: its never-seen classes are semantically entangled with the training classes, and no input-density method can call something "void" when it sits *on* the manifold. But look at *how* it fails — the per-class routing is structured, not random:
+
+```
+t-shirt/top  -> mostly escalate  (0.98)   looks like shirt, the contested class
+pullover     -> mostly escalate  (0.97)   ditto
+coat         -> mostly escalate  (0.95)   ditto
+sneaker      -> mostly absence   (0.98)   looks like ankle boot, so reads as one
+```
+
+The head routes unfamiliar inputs by what they *resemble*: contested-looking things go to a human, boot-looking things read as boots. What it cannot do — what nothing operating on input density can do — is detect semantic novelty that overlaps the trained manifold. Both boundaries ship as assertions in `tests/test_realbench.py`, not just prose.
+
+Two mechanisms were added for real data, both continuous with the philosophy: a **shell background** (training points plus noise — the void tax lands on the *neighborhood* of the manifold, where near-OOD lives) and an explicit **evidence-accumulation incentive weight** (`fit_var_weight`) so contradiction zones can outbid the void tax exactly where data is dense; the incentive vanishes where the readout is decided, so clear regions are untouched.
+
+### The two lieutenants: crash vs Byzantine on real telemetry
+
+The two zeros are also a **distributed-systems fault-triage problem**, and distributed systems already price them differently: crash faults (a node goes *silent*) are survivable with 2f+1 replicas, Byzantine faults (a node speaks *contradiction*) cost 3f+1 (Lamport, Shostak & Pease, 1982). Silence is cheaper than lies — and they demand opposite responses. Silence → wait, re-poll, **gather**; do not infer betrayal from a dead link. Contradiction → challenge, attest, **escalate**.
+
+`uncollapsed --demo faults` runs this on real telemetry: the Intel Berkeley Lab sensor deployment (Madden et al., 2004) — 54 motes reporting temperature every ~31 s, fetched once from a public mirror. Instances are (mote, hour) windows featurized *against spatial peers*; the split is temporal (train days 0–6, test days 7–9). There is no public corpus of labelled naturally-occurring Byzantine faults, so per the standard BFT/sensor-fusion methodology the signal statistics are real and the fault models are canonical injections: **drift** (±2.5–5 °C calibration bias — the benign, labelled clear-task fault), **Byzantine** (the mote replays its own trace from 12 h earlier: smooth, plausible, wrong thermal regime — labelled *both ways*, because from one observation you cannot tell whether this unit lies or its peers drifted; that is the two lieutenants problem), and **crash** (75–95 % of reports dropped, remnants genuine — never seen in training).
+
+| metric (seeds 0/1/2) | FieldHead | entropy baseline |
+| --- | --- | --- |
+| clear accuracy (healthy vs drift) | 0.880 / 0.883 / 0.871 | 0.863 / 0.879 / 0.851 |
+| **triage AUC** — crash vs Byzantine | **1.000 / 1.000 / 1.000** | 0.064 / 0.030 / 0.000 |
+| crash → `gather` | 1.00 / 1.00 / 1.00 | — |
+| Byzantine → `escalate` | 0.93 / 0.88 / 0.94 | — |
+
+The head's separation is perfect and the baseline's is perfectly *inverted*: entropy ranks nearly every silent unit as more confident than every lying one, because the MLP saturates on off-manifold sparse inputs. A monitoring system routing on that scalar would page a human for dead batteries and quietly trust replayed telemetry. Clear accuracy sits at the same ~0.87 ceiling for both models — small drifts are genuinely confusable with real thermal gradients, which is the honest residual, not a tuning artifact. Assertions in `tests/test_faultbench.py`.
+
 ## Four‑mass accounting
 
 From the two channels (`sp = 1 - e^-presence`, `sa = 1 - e^-absence`):
@@ -130,11 +215,11 @@ They sum to exactly 1 (the joint distribution of two independent Bernoulli chann
 - [ ] Subjective‑logic‑exact conjunction/disjunction operators in `algebra.py`.
 - [ ] **Unsupervised abstention** — hold driven by the field's own internal conflict, not by labels. (The interesting open problem.)
 - [ ] Multi‑class / vector‑valued fields.
-- [ ] A field‑gated readout layer usable as a drop‑in "I'm not ready to answer yet" head.
+- [x] A field‑gated readout layer usable as a drop‑in "I'm not ready to answer yet" head — see `FieldHead` and the two zeros benchmark.
 
 ## Related ideas
 
-This is not built in a vacuum. The two‑channel field is closely related to **subjective logic** (Jøsang's belief/disbelief/uncertainty opinions), **Dempster–Shafer evidence theory** (belief vs. plausibility, and conflict `K`), **intuitionistic fuzzy sets** (membership/non‑membership/hesitation), and **three‑valued logics** (Kleene, Łukasiewicz). The distinctive commitments here are keeping `conflict` and `voidness` first‑class, and treating collapse as an explicit edge operation that can legitimately abstain.
+This is not built in a vacuum. The two‑channel field is closely related to **subjective logic** (Jøsang's belief/disbelief/uncertainty opinions), **Dempster–Shafer evidence theory** (belief vs. plausibility, and conflict `K`), **intuitionistic fuzzy sets** (membership/non‑membership/hesitation), and **three‑valued logics** (Kleene, Łukasiewicz). The `FieldHead` objective is deliberately close to **evidential deep learning** (Sensoy, Kaplan & Kandemir, *Evidential Deep Learning to Quantify Classification Uncertainty*, NeurIPS 2018) and to subjective logic's **vacuity vs. dissonance** split — the two-zeros distinction is not new to this library, and that literature deserves the credit for the mechanism. The distinctive commitments here are keeping `conflict` and `voidness` first‑class throughout the *entire* computation (not only at a Dirichlet output layer), and treating collapse as an explicit edge operation with an actionable routing vocabulary that can legitimately abstain.
 
 ## Citing
 
