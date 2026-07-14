@@ -16,7 +16,7 @@ A visible `0` is not one thing. In binary you never have to decide what `0` *mea
       ┌────────────┬──────────┬──────────┬──────────────────────────┐
       │  void      │ presence │ absence  │  nothing there           │
       │  calm      │  small   │  small   │  low-energy balance      │
-      │  conflict  │  high    │  high    │  both poles strong  ← !   │
+      │  conflict  │  high    │  high    │  both poles strong  ← !  │
       │  lean      │  differ  │  differ  │  a directional tilt      │
       └────────────┴──────────┴──────────┴──────────────────────────┘
 ```
@@ -27,7 +27,6 @@ A visible `0` is not one thing. In binary you never have to decide what `0` *mea
   <em>A two-channel net learning noisy XOR — and learning <b>where to abstain</b>. The gold band is HOLD.</em>
 </p>
 
-📖 **Full documentation:** <https://jfinst1.github.io/uncollapsed/>
 
 ---
 
